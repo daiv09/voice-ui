@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import Quill from "quill";
 import html2pdf from "html2pdf.js";
-import "quill/dist/quill.snow.css";
+import { AuthProvider } from "./AuthContext";
 import { toast, ToastContainer } from "react-toastify";
+import "quill/dist/quill.snow.css";
 import "react-toastify/dist/ReactToastify.css";
 
 const Dashboard = () => {
@@ -13,6 +14,22 @@ const Dashboard = () => {
   const [recognitionInstance, setRecognitionInstance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const currentTasks = savedData.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Define a function to handle the pagination logic
+  const goToPage = (pageNumber) => {
+    setCurrentPage(pageNumber);
+  };
+
+  // Logic for disabling the Previous/Next buttons based on the current page
+  const isPreviousDisabled = currentPage === 1;
+  const isNextDisabled = currentTasks.length < itemsPerPage;
 
   const token = localStorage.getItem("token");
   const accumulatedTranscript = useRef(""); // To store the entire transcript for the session
@@ -49,10 +66,17 @@ const Dashboard = () => {
     recognition.interimResults = true;
 
     recognition.onerror = (event) => {
+      if (event.error === "no-speech") {
+        toast.error("No speech detected for 10 seconds, stopping recognition.");
+        recognition.stop();
+        clearTimeout(inactivityTimeout);
+      } else {
       toast.error(`Speech recognition error: ${event.error}`);
+      }
     };
 
     accumulatedTranscript.current = ""; // Reset the accumulated transcript
+    let inactivityTimeout = null;
 
     recognition.onresult = (event) => {
       let interimTranscript = "";
@@ -73,6 +97,14 @@ const Dashboard = () => {
       setTranscript(
         accumulatedTranscript.current.trim() + " " + interimTranscript.trim()
       );
+
+      // Reset inactivity timeout whenever new text is generated
+      clearTimeout(inactivityTimeout);
+      inactivityTimeout = setTimeout(() => {
+        console.log("No speech detected for 10 seconds, stopping recognition.");
+        recognition.stop();
+      }, 10000); // 10 seconds timeout
+
     };
     recognition.onspeechend = () => {
       console.log("Speech has ended.");
@@ -81,7 +113,9 @@ const Dashboard = () => {
 
     recognition.start();
     setRecognitionInstance(recognition);
-    toast.info("Speech recognition started");
+    toast.info("Speech recognition started", {
+      autoClose: 2000, // Duration in milliseconds (2000ms = 2 seconds)
+    });
   };
 
   const stopListening = () => {
@@ -91,16 +125,20 @@ const Dashboard = () => {
 
       const finalTranscript = accumulatedTranscript.current.trim();
       if (finalTranscript) {
+        const currentTime = new Date();
+        const timestamp = currentTime.toLocaleString(); // "12/21/2024, 14:30:45"
+
         axios
           .post(
             "http://localhost:4000/save",
             { text: finalTranscript },
             { headers: { Authorization: `Bearer ${token}` } }
           )
-          .then(() => {
+          .then((response) => {
             setSavedData((prev) => [
               ...prev,
-              { text: finalTranscript, noteId: Date.now() },
+              { text: finalTranscript,
+                timestamp: response.data.timestamp || timestamp, noteId: Date.now() },
             ]);
             toast.success("Data saved successfully");
           })
@@ -184,13 +222,18 @@ const Dashboard = () => {
       toast.error("Text cannot be empty");
       return;
     }
+    const currentTime = new Date();
+    const timestamp = currentTime.toLocaleString();
+
     try {
       const response = await axios.post(
         "http://localhost:4000/save",
-        { text: newText },
+        { text: newText, timestamp: timestamp },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setSavedData((prev) => [...prev, response.data]);
+      setSavedData((prev) => [...prev,
+        { text: newText, timestamp: timestamp, noteId: response.data.noteId },
+      ]);
       setNewText(""); // Clear input
       toast.success("Data added successfully");
     } catch (error) {
@@ -249,7 +292,7 @@ const Dashboard = () => {
       }
     } else {
       setDeleteConfirmation(id);
-      toast.info("Click again to confirm delete");
+      toast.info("Click Again! To Confirm Delete");
     }
   };
 
@@ -277,73 +320,135 @@ const Dashboard = () => {
   return (
     <div className="container mt-5">
       <ToastContainer />
-      <h1 className="text-center mb-4">Dashboard</h1>
-
-      <div className="text-center mb-4">
+      <h1 className="animate__animated animate__fadeIn">Dashboard</h1>
+      <p className="text-muted text-center animate__animated animate__fadeInUp">
+        Welcome to your dashboard! Here you can transcribe audio, manage tasks,
+        and save your data effortlessly.
+      </p>
+      <div className="mb-4">
+        <h2>Speech-to-Text</h2>
         <button className="btn btn-success" onClick={startListening}>
           Start Listening
         </button>
         <button
-          className="btn btn-danger mx-3"
+          className="btn btn-danger mx-3 animate__animated animate__fadeIn animate__delay-2s"
           onClick={stopListening}
           disabled={!recognitionInstance}
         >
           Stop Listening
         </button>
+        <p className="mt-3">
+          <strong>Transcript:</strong>{" "}
+          <span className="text-primary">
+            {transcript || "No transcript available."}
+          </span>
+        </p>
       </div>
-      <p className="mt-3">
-        <strong>Transcript:</strong> {transcript}
-      </p>
+      <div className="mb-4">
+        <h2>Audio File Transcription</h2>
+        <div className="mb-3 d-flex align-items-stretch">
+          <input
+            className="form-control me-2"
+            type="file"
+            accept="audio/*"
+            // onChange={handleAudioFileChange}
+            style={{ flex: 1 }}
+          />
+          <button
+            className="btn btn-outline-success"
+            // onClick={transcribeAudio}
+            style={{ flexGrow: 0 }}
+            // disabled={!audioFile} // Disable button until a file is uploaded
+          >
+            Transcribe Audio
+          </button>
+        </div>
+        <p className="text-muted mt-2">
+          Upload an audio file to generate a text transcription.
+        </p>
+      </div>
 
       {loading ? (
-        <div className="text-center">Loading data...</div>
+        <p className="animate__animated animate__flash">Loading data...</p>
       ) : (
         <>
-          <h2>Saved Data</h2>
-          <ul className="list-group mb-4">
-            {savedData.map((item) => (
-              <li
-                key={item._id}
-                className="list-group-item d-flex justify-content-between align-items-center"
-              >
-                <EditableText
-                  text={item.text}
-                  onSave={(updatedText) => updateData(item._id, updatedText)}
-                />
-                <small className="text-muted d-block mt-1">
-                  Saved on: {item.timestamp || "N/A"}
-                </small>
-                <div className="d-flex gap-2">
-                  <button
-                    className="btn btn-outline-primary btn-sm"
-                    onClick={() => exportToPDF(item.text, item._id)}
-                  >
-                    PDF
-                  </button>
-                  <button
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => exportToCSV(item.text, item._id)}
-                  >
-                    CSV
-                  </button>
-                  <button
-                    className="btn btn-outline-success btn-sm"
-                    onClick={() => copyToClipboard(item.text)}
-                  >
-                    Copy
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => deleteData(item._id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-
+          {/* Saved Tasks */}
           <div className="mb-4">
+            <h2>Saved Tasks</h2>
+            {savedData.length > 0 ? (
+              <ul className="list-group">
+                {savedData.map((item) => (
+                  <li
+                    key={item._id}
+                    className="list-group-item d-flex justify-content-between align-items-center"
+                  >
+                    <EditableText
+                      text={item.text}
+                      onSave={(updatedText) =>
+                        updateData(item._id, updatedText)
+                      }
+                    />
+                    <small className="text-muted d-block mt-1">
+                      Saved on: {item.timestamp || "N/A"}
+                    </small>
+                    <div className="d-flex gap-2">
+                      <button
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => exportToPDF(item.text, item._id)}
+                      >
+                        PDF
+                      </button>
+                      <button
+                        className="btn btn-outline-secondary btn-sm"
+                        onClick={() => exportToCSV(item.text, item._id)}
+                      >
+                        CSV
+                      </button>
+                      <button
+                        className="btn btn-outline-success btn-sm"
+                        onClick={() => copyToClipboard(item.text)}
+                      >
+                        Copy
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => deleteData(item._id)}
+                        // {deleteConfirmation === item._id ? "Are you sure?" : "Delete"}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted">
+                No tasks saved yet. Add a new one below!
+              </p>
+            )}
+          </div>
+          {/* --------------------------------------------------------------------------------------------------------------- */}
+          <div>
+            {/* <div className="mt-3">
+            <button 
+                className="btn btn-primary"
+                onClick={() => goToPage(currentPage - 1)} 
+                disabled={isPreviousDisabled}
+            >
+                Previous
+            </button>
+            <button 
+                className="btn btn-primary mx-3" 
+                onClick={() => goToPage(currentPage + 1)} 
+                disabled={isNextDisabled}
+            >
+                Next
+            </button>
+        </div> */}
+          </div>
+          {/* ----------------------------------------------------------------------------------------------------------- */}
+          {/* Add New Data */}
+          <div className="mb-4 pt-2">
             <h3 className="t-2">Add New Data</h3>
             <input
               type="text"
@@ -352,8 +457,8 @@ const Dashboard = () => {
               value={newText}
               onChange={(e) => setNewText(e.target.value)}
             />
-            <button className="btn btn-primary mt-3" onClick={addData}>
-              Add New Text
+            <button className="btn btn-primary mt-3  pt-2" onClick={addData}>
+              Add
             </button>
           </div>
         </>
@@ -367,6 +472,11 @@ const EditableText = ({ text, onSave }) => {
   const [currentText, setCurrentText] = useState(text);
   const editorRef = useRef(null);
   const quillRef = useRef(null);
+
+  const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const [audioFile, setAudioFile] = useState(null); // For storing the uploaded audio file
 
   const toolbarOptions = [
     ["bold", "italic", "underline", "strike"],
@@ -393,6 +503,10 @@ const EditableText = ({ text, onSave }) => {
         quillRef.current.on("text-change", () => {
           setCurrentText(quillRef.current.root.innerHTML);
         });
+      }
+      console.log("Updating Quill editor content:", currentText);
+      if (quillRef.current) {
+        quillRef.current.root.innerHTML = currentText;
       }
     } else {
       if (quillRef.current) {
