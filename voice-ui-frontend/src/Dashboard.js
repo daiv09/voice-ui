@@ -346,15 +346,6 @@ const Dashboard = () => {
     }
   };
 
-  // const transcribeAudioWithWhisper = async (file) => {
-  //   const apiKey = "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";
-  //   const formData = new FormData();
-  //   formData.append("file", file);
-  //   formData.append("model", "whisper-1"); // Specify the Whisper model
-    
-  //   try {
-  //     const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", formData, {
-  //       headers: {
   //         Authorization: `Bearer ${apiKey}`,
   //         "Content-Type": "multipart/form-data",
   //       },
