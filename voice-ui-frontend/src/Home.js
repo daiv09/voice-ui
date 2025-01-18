@@ -144,7 +144,7 @@ const Home = () => {
               <h4 className="text-light">Daiwiik Harihar</h4>
             </div>
             <div>
-              <h4 className="text-light">Lorem picsum</h4>
+              <h4 className="text-light">Vedansh</h4>
             </div>
           </div>
         </div>

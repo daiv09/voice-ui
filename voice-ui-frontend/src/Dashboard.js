@@ -6,9 +6,10 @@ import { AuthProvider } from "./AuthContext";
 import { toast, ToastContainer } from "react-toastify";
 import "quill/dist/quill.snow.css";
 import "react-toastify/dist/ReactToastify.css";
+import { run } from './AssemblyAI.mjs'; // Import the transcription logic
+import { transcribeAudio } from "./transcriptionService";
 
 const Dashboard = () => {
-  const [transcript, setTranscript] = useState("");
   const [newText, setNewText] = useState(""); // For adding new data
   const [savedData, setSavedData] = useState([]);
   const [recognitionInstance, setRecognitionInstance] = useState(null);
@@ -16,6 +17,52 @@ const Dashboard = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [audioFile, setAudioFile] = useState(null);
+  const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState('');
+
+  // Handle file input change
+  // Example usage
+  const handleTranscription = async (file) => {
+    try {
+      const transcription = await transcribeAudio(file);
+      console.log(transcription);
+    } catch (error) {
+      console.error(error.message);
+    }
+  };
+
+  // Function to handle file input change
+  const handleFileChange = async (event) => {
+    const file = event.target.files[0]; // Get the first selected file
+
+    if (file) {
+      try {
+        // Handle file (e.g., transcribe audio file, upload, etc.)
+        const transcription = await transcribeAudio(file);
+        console.log("Transcription:", transcription);
+      } catch (error) {
+        console.error("Error during transcription:", error.message);
+      }
+    } else {
+      console.log("No file selected.");
+    }
+  };
+  // // Handle transcription
+  // const handleTranscription = async () => {
+  //   if (!audioFile) {
+  //     setError('Please upload an audio file first.');
+  //     return;
+  //   }
+  //   try {
+  //     setError('');
+  //     const transcript = await run(audioFile);
+  //     setTranscript(transcript);
+  //   } catch (err) {
+  //     setError('Error processing transcription: ' + err.message);
+  //   }
+  // };
+
 
   const currentTasks = savedData.slice(
     (currentPage - 1) * itemsPerPage,
@@ -71,7 +118,7 @@ const Dashboard = () => {
         recognition.stop();
         clearTimeout(inactivityTimeout);
       } else {
-      toast.error(`Speech recognition error: ${event.error}`);
+        toast.error(`Speech recognition error: ${event.error}`);
       }
     };
 
@@ -104,7 +151,6 @@ const Dashboard = () => {
         console.log("No speech detected for 10 seconds, stopping recognition.");
         recognition.stop();
       }, 10000); // 10 seconds timeout
-
     };
     recognition.onspeechend = () => {
       console.log("Speech has ended.");
@@ -137,8 +183,11 @@ const Dashboard = () => {
           .then((response) => {
             setSavedData((prev) => [
               ...prev,
-              { text: finalTranscript,
-                timestamp: response.data.timestamp || timestamp, noteId: Date.now() },
+              {
+                text: finalTranscript,
+                timestamp: response.data.timestamp || timestamp,
+                noteId: Date.now(),
+              },
             ]);
             toast.success("Data saved successfully");
           })
@@ -231,7 +280,8 @@ const Dashboard = () => {
         { text: newText, timestamp: timestamp },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setSavedData((prev) => [...prev,
+      setSavedData((prev) => [
+        ...prev,
         { text: newText, timestamp: timestamp, noteId: response.data.noteId },
       ]);
       setNewText(""); // Clear input
@@ -296,6 +346,65 @@ const Dashboard = () => {
     }
   };
 
+  // const transcribeAudioWithWhisper = async (file) => {
+  //   const apiKey = "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";
+  //   const formData = new FormData();
+  //   formData.append("file", file);
+  //   formData.append("model", "whisper-1"); // Specify the Whisper model
+    
+  //   try {
+  //     const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", formData, {
+  //       headers: {
+  //         Authorization: `Bearer ${apiKey}`,
+  //         "Content-Type": "multipart/form-data",
+  //       },
+  //     });
+  //     return response.data.text; // Transcription result
+  //   } catch (error) {
+  //     console.error("Error during transcription:", error);
+  //     throw new Error("Failed to transcribe audio");
+  //   }
+  // };
+
+  // const handleAudioFileChange = async (event) => {
+  //   const file = event.target.files[0];
+  //   if (!file) {
+  //     toast.error("Please upload an audio file");
+  //     return;
+  //   } 
+  //   setAudioFile(file);
+    
+  //   try {
+  //     const transcript = await transcribeAudioWithWhisper(file);
+  //     console.log("Transcript:", transcript);
+  //     toast.success("Audio transcribed successfully");
+  //     setTranscript(transcript); // Update UI with the transcript
+  //   } catch (error) {
+  //     toast.error("Failed to transcribe audio");
+  //   }
+  // };
+
+  // const handleTranscription = async () => {
+  //   if (!audioFile) return;
+
+  //   // Assuming you have a function to handle transcription
+  //   const formData = new FormData();
+  //   formData.append("audio", audioFile);
+
+  //   try {
+  //     const response = await fetch('/your-transcription-endpoint', { // Replace with actual endpoint
+  //       method: 'POST',
+  //       body: formData,
+  //     });
+
+  //     const result = await response.json();
+  //     setTranscript(result.transcription); // Assuming the API returns the transcription
+  //   } catch (error) {
+  //     console.error('Error transcribing audio:', error);
+  //     toast.error('Failed to transcribe audio');
+  //   }
+  // };
+
   //   useEffect(() => {
   //     const handleKeyDown = (event) => {
   //       // Check if the spacebar is pressed to start listening
@@ -351,12 +460,12 @@ const Dashboard = () => {
             className="form-control me-2"
             type="file"
             accept="audio/*"
-            // onChange={handleAudioFileChange}
+            onChange={handleFileChange}
             style={{ flex: 1 }}
           />
           <button
             className="btn btn-outline-success"
-            // onClick={transcribeAudio}
+            onClick={handleTranscription}
             style={{ flexGrow: 0 }}
             // disabled={!audioFile} // Disable button until a file is uploaded
           >
@@ -366,6 +475,13 @@ const Dashboard = () => {
         <p className="text-muted mt-2">
           Upload an audio file to generate a text transcription.
         </p>
+        {error && <p className="text-danger">{error}</p>}
+        {transcript && (
+        <div className="mt-3">
+          <h3>Transcription:</h3>
+          <p>{transcript}</p>
+        </div>
+      )}
       </div>
 
       {loading ? (
@@ -473,10 +589,10 @@ const EditableText = ({ text, onSave }) => {
   const editorRef = useRef(null);
   const quillRef = useRef(null);
 
-  const recognitionRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const [audioFile, setAudioFile] = useState(null); // For storing the uploaded audio file
+  // const recognitionRef = useRef(null);
+  // const mediaRecorderRef = useRef(null);
+  // const audioChunksRef = useRef([]);
+  // const [audioFile, setAudioFile] = useState(null); // For storing the uploaded audio file
 
   const toolbarOptions = [
     ["bold", "italic", "underline", "strike"],
